@@ -1,0 +1,5 @@
+.terraform/
+*.tfstate
+*.tfstate.backup
+*.zip
+terraform.tfvars  # 보안 민감 정보
