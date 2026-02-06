@@ -40,7 +40,7 @@ resource "aws_security_group" "monitoring_sg" {
   }
 
   ingress {
-    from_port   = 22 # SSH 접속용 
+    from_port   = 22 # SSH 접속용            
     to_port     = 22
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
@@ -124,6 +124,12 @@ resource "aws_iam_role_policy" "ec2_policy" {
 }
 
 # 4. 람다 함수 정의 (시작용)
+
+# 이 블럭은 environment 블럭을 통해 전원을 켤 인스턴스 이름이 담긴 리스트를
+# INSTANCE_IDS라는 이름으로 전달 받고 filename을 통해 
+# handler에서 실행할 코드가 담긴 압축 파일을 접근을 하고 
+# handler를 통해 압축파일의 코드(인스턴스 시작)를 실행
+
 resource "aws_lambda_function" "ec2_start_lambda" {
   filename         = data.archive_file.start_zip.output_path
   function_name    = "EC2_Start_Function"
@@ -138,6 +144,11 @@ resource "aws_lambda_function" "ec2_start_lambda" {
     }
   }
 }
+# data.archive_file.stop_zip : 
+# 람다 함수의 소스 코드가 담긴 압축 파일에 대한 모든 정보
+# output_path : 
+# 그 압축 파일의 경로를 의미
+# ${path.module}/ec2_stop.zip 와 같은 의미
 
 # 5. 람다 함수 정의 (중지용)
 resource "aws_lambda_function" "ec2_stop_lambda" {
@@ -147,7 +158,11 @@ resource "aws_lambda_function" "ec2_stop_lambda" {
   handler          = "ec2_stop.lambda_handler"
   runtime          = "python3.9"
   source_code_hash = data.archive_file.stop_zip.output_base64sha256
-
+ # 람다 함수가 변경되었는지 확인하는 용도
+ # .output_base64sha256: 압축된 결과물의 지문(해시값)을 가져오라는 뜻
+ #이 줄이 없으면, 여러분이 파이썬 코드를 수정하고 아무리 apply를 해도 
+ # AWS에 있는 람다 코드는 옛날 버전 그대로 멈춰있을 확률이 높습니다. 
+ # 즉, **"코드 수정 사항을 강제로 반영시키기 위한 필수 장치"**라고 보시면 됩니다.
   environment {
     variables = {
       INSTANCE_IDS = join(",", aws_instance.web_server[*].id)
@@ -156,6 +171,11 @@ resource "aws_lambda_function" "ec2_stop_lambda" {
 }
 
 # 6. EventBridge (스케줄러) - 10시 시작
+# 알람 시계 만들기: aws_cloudwatch_event_rule (지금 하신 것)
+
+# 시계와 람다 연결: "시계가 울리면 이 람다를 실행해!" (aws_cloudwatch_event_target)
+
+# 람다의 허락: "알람 시계가 나를 깨우는 것을 허락할게!" (aws_lambda_permission)
 resource "aws_cloudwatch_event_rule" "start_rule" {
   name                = "ec2_start_rule"
   schedule_expression = "cron(0 1 * * ? *)" # UTC 01:00 = KST 10:00
