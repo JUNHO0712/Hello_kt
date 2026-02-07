@@ -55,7 +55,7 @@ resource "aws_security_group" "monitoring_sg" {
 resource "aws_instance" "web_server" {
   count                  = 2
   ami                    = "ami-040c33c6a51fd5d96" 
-  instance_type          = "t2.micro"
+  instance_type          = "t3.micro"
   vpc_security_group_ids = [aws_security_group.web_sg.id]
   subnet_id = element([aws_subnet.private_1.id, aws_subnet.private_2.id], count.index)
   tags = { 
@@ -64,7 +64,7 @@ resource "aws_instance" "web_server" {
 }
 resource "aws_instance" "monitoring_server" {
   ami                    = "ami-040c33c6a51fd5d96" # 동일한 Ubuntu 이미지 사용 [cite: 2, 5]
-  instance_type          = "t2.micro"             # 프로메테우스는 메모리를 많이 쓰므로 t2.medium 추천
+  instance_type          = "t3.micro"             # 프로메테우스는 메모리를 많이 쓰므로 t2.medium 추천
   vpc_security_group_ids = [aws_security_group.monitoring_sg.id]
   subnet_id            = aws_subnet.public_1.id 
   iam_instance_profile = aws_iam_instance_profile.monitoring_profile.name 

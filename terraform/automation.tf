@@ -13,6 +13,42 @@ data "archive_file" "stop_zip" {
   output_path = "${path.module}/ec2_stop.zip"
 }
 
+
+# 2. 람다용 IAM 역할(Role) 생성
+resource "aws_iam_role" "lambda_role" {
+  name = "ec2_scheduler_lambda_role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Action = "sts:AssumeRole"
+      Effect = "Allow"
+      Principal = { Service = "lambda.amazonaws.com" }
+    }]
+  })
+}
+
+# 3. EC2 제어 권한(Policy) 정의 및 연결
+resource "aws_iam_role_policy" "ec2_policy" {
+  name = "ec2_control_policy"
+  role = aws_iam_role.lambda_role.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect   = "Allow"
+        Action   = ["ec2:StartInstances", "ec2:StopInstances", "ec2:DescribeInstances"]
+        Resource = "*"
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["logs:CreateLogGroup", "logs:CreateLogStream", "logs:PutLogEvents"]
+        Resource = "arn:aws:logs:*:*:*"
+      }
+    ]
+  })
+}
 resource "aws_lambda_function" "ec2_start_lambda" {
   filename         = data.archive_file.start_zip.output_path
   function_name    = "EC2_Start_Function"

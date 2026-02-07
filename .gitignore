@@ -7,3 +7,5 @@ terraform.tfvars  # 보안 민감 정보
 lambda설명.txt 
 
 main.txt
+
+.DS_Store
