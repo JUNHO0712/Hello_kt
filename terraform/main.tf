@@ -6,7 +6,7 @@ provider "aws" {
 # 보안 그룹: 80번(HTTP)과 22번(SSH) 문을 엽니다.
 resource "aws_security_group" "web_sg" {
   name = "web_server_sg"
-
+  vpc_id = aws_vpc.main.id
   ingress {
     from_port   = 80
     to_port     = 80
@@ -31,7 +31,7 @@ resource "aws_security_group" "web_sg" {
 # 모니터링 서버 전용 보안 그룹 
 resource "aws_security_group" "monitoring_sg" {
   name = "monitoring_server_sg"
-
+  vpc_id = aws_vpc.main.id
   ingress {
     from_port   = 9090 # 프로메테우스 기본 포트
     to_port     = 9090
@@ -53,6 +53,89 @@ resource "aws_security_group" "monitoring_sg" {
     cidr_blocks = ["0.0.0.0/0"] 
   }
 }
+# 1. VPC 생성
+resource "aws_vpc" "main" {
+  cidr_block = "10.0.0.0/16"
+  tags = { Name = "Main-VPC" }
+}
+
+# 2. 서브넷 생성 (고가용성을 위해 2개의 가용영역 사용)
+resource "aws_subnet" "public_1" {
+  vpc_id            = aws_vpc.main.id
+  cidr_block        = "10.0.1.0/24"
+  availability_zone = "ap-northeast-2a"
+  tags = { Name = "Public-Subnet-1" }
+}
+# public_1 밑에 추가하세요
+resource "aws_subnet" "public_2" {
+  vpc_id            = aws_vpc.main.id
+  cidr_block        = "10.0.3.0/24"
+  availability_zone = "ap-northeast-2b" # 2a가 아닌 다른 구역
+  tags = { Name = "Public-Subnet-2" }
+}
+resource "aws_subnet" "private_1" {
+  vpc_id            = aws_vpc.main.id
+  cidr_block        = "10.0.2.0/24"
+  availability_zone = "ap-northeast-2a"
+  tags = { Name = "Private-Subnet-1" }
+}
+# 2번 프라이빗 서브넷 추가 (장애 대응용)
+resource "aws_subnet" "private_2" {
+  vpc_id            = aws_vpc.main.id
+  cidr_block        = "10.0.4.0/24"
+  availability_zone = "ap-northeast-2b" # 2c가 아닌 다른 구역
+  tags = { Name = "Private-Subnet-2" }
+}
+# 3. 인터넷 관문 (Public용)
+resource "aws_internet_gateway" "igw" {
+  vpc_id = aws_vpc.main.id
+}
+
+resource "aws_route_table" "public_rt" {
+  vpc_id = aws_vpc.main.id
+  route {
+    cidr_block = "0.0.0.0/0"
+    gateway_id = aws_internet_gateway.igw.id
+  }
+}
+
+resource "aws_route_table_association" "public_assoc" {
+  subnet_id      = aws_subnet.public_1.id
+  route_table_id = aws_route_table.public_rt.id
+}
+# 2번 프라이빗 서브넷도 NAT를 쓰도록 연결
+resource "aws_route_table_association" "private_assoc_2" {
+  subnet_id      = aws_subnet.private_2.id
+  route_table_id = aws_route_table.private_rt.id
+}
+
+# 1. NAT가 사용할 고정 IP(EIP) 하나 예약
+resource "aws_eip" "nat_eip" {
+  domain = "vpc"
+}
+
+# 2. NAT 게이트웨이 생성 (반드시 퍼블릭 서브넷에 두어야 함)
+resource "aws_nat_gateway" "nat_gw" {
+  allocation_id = aws_eip.nat_eip.id
+  subnet_id     = aws_subnet.public_1.id # 입구는 퍼블릭에!
+  tags          = { Name = "Main-NAT" }
+}
+
+# 3. 프라이빗 전용 라우팅 테이블 (프라이빗 서버들을 위한 지도)
+resource "aws_route_table" "private_rt" {
+  vpc_id = aws_vpc.main.id
+
+  route {
+    cidr_block     = "0.0.0.0/0"
+    nat_gateway_id = aws_nat_gateway.nat_gw.id # 인터넷 나갈 거면 NAT로 가라!
+  }
+}
+
+# 4. 프라이빗 서브넷에 이 지도를 쥐어주기
+resource "aws_route_table_association" "private_assoc" {
+  subnet_id      = aws_subnet.private_1.id
+  route_table_id = aws_route_table.private_rt.id
+}
 # EC2 설정에 보안 그룹 연결
 # 통합된 EC2 생성 코드
 resource "aws_instance" "web_server" {
@@ -60,7 +143,7 @@ resource "aws_instance" "web_server" {
   ami                    = "ami-040c33c6a51fd5d96" 
   instance_type          = "t2.micro"
   vpc_security_group_ids = [aws_security_group.web_sg.id]
-
+  subnet_id = element([aws_subnet.private_1.id, aws_subnet.private_2.id], count.index)
   tags = { 
     Name = "My-Web-Server-${count.index}" 
   }
@@ -69,11 +152,77 @@ resource "aws_instance" "monitoring_server" {
   ami                    = "ami-040c33c6a51fd5d96" # 동일한 Ubuntu 이미지 사용 [cite: 2, 5]
   instance_type          = "t2.medium"             # 프로메테우스는 메모리를 많이 쓰므로 t2.medium 추천
   vpc_security_group_ids = [aws_security_group.monitoring_sg.id]
-
+  subnet_id            = aws_subnet.public_1.id 
+  iam_instance_profile = aws_iam_instance_profile.monitoring_profile.name 
   tags = {
     Name = "Monitoring-Server-Prometheus" # 모니터링 전용 태그 [cite: 3]
   }
 }
+# 1. 로드밸런서 본체
+resource "aws_lb" "web_alb" {
+  name               = "web-app-alb"
+  internal           = false
+  load_balancer_type = "application"
+  security_groups    = [aws_security_group.web_sg.id]
+  subnets = [aws_subnet.public_1.id, aws_subnet.public_2.id] # ALB는 서브넷 2개 이상 필요
+}
+
+# 2. 대상 그룹 (앱 서버들을 담는 바구니)
+resource "aws_lb_target_group" "app_tg" {
+  name     = "app-target-group"
+  port     = 80
+  protocol = "HTTP"
+  vpc_id   = aws_vpc.main.id
+}
+
+# 3. 리스너 (80포트로 오면 대상 그룹으로 전달)
+resource "aws_lb_listener" "http" {
+  load_balancer_arn = aws_lb.web_alb.arn
+  port              = "80"
+  protocol          = "HTTP"
+
+  default_action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.app_tg.arn
+  }
+}
+
+# 4. 앱 서버들을 로드밸런서에 연결
+resource "aws_lb_target_group_attachment" "app_attach" {
+  count            = 2
+  target_group_arn = aws_lb_target_group.app_tg.arn
+  target_id        = aws_instance.web_server[count.index].id
+  port             = 80
+}
+
+# 1. 모니터링 서버용 역할
+resource "aws_iam_role" "monitoring_role" {
+  name = "monitoring_server_role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Action = "sts:AssumeRole"
+      Effect = "Allow"
+      Principal = { Service = "ec2.amazonaws.com" }
+    }]
+  })
+}
+
+# 2. EC2 정보를 읽을 수 있는 권한 부여 (Read Only)
+resource "aws_iam_role_policy_attachment" "ec2_read" {
+  role       = aws_iam_role.monitoring_role.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonEC2ReadOnlyAccess"
+}
+
+# 3. EC2에 이 신분증을 부착할 '프로필' 생성
+resource "aws_iam_instance_profile" "monitoring_profile" {
+  name = "monitoring_instance_profile"
+  role = aws_iam_role.monitoring_role.name
+}
+
+# 4. 기존 monitoring_server 리소스에 아래 한 줄 추가!
+# iam_instance_profile = aws_iam_instance_profile.monitoring_profile.name
 # 1. 파이썬 코드를 람다용 zip 파일로 압축 (자동화)
 data "archive_file" "start_zip" {
   type        = "zip"
