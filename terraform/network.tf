@@ -91,6 +91,10 @@ resource "aws_lb" "web_alb" {
   security_groups    = [aws_security_group.web_sg.id]
   subnets            = [aws_subnet.public_1.id, aws_subnet.public_2.id] # ALB는 서브넷 2개 이상 필요
 }
+# 로드밸런서의 DNS 주소 출력
+output "alb_dns_name" {
+  value = aws_lb.web_alb.dns_name
+}
 
 # 2. 대상 그룹 (앱 서버들을 담는 바구니)
 resource "aws_lb_target_group" "app_tg" {
@@ -126,3 +130,4 @@ resource "aws_lb_target_group_attachment" "app_attach" {
   target_id        = aws_instance.web_server[count.index].id
   port             = 80
 }
+
