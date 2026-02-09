@@ -18,6 +18,16 @@ resource "aws_security_group" "web_sg" {
     cidr_blocks = ["0.0.0.0/0"] # 실제로는 본인 IP만 허용하는 게 좋습니다.
   }
 
+ # Node Exporter -  서버의 건강 상태 수집기
+  ingress {
+    from_port       = 9100
+    to_port         = 9100
+    protocol        = "tcp"
+    # 모니터링 서버만 접근 허용
+    security_groups = [aws_security_group.monitoring_sg.id] 
+  
+  }
+
   egress {
     from_port   = 0
     to_port     = 0
@@ -41,6 +51,13 @@ resource "aws_security_group" "monitoring_sg" {
     to_port     = 22
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
+  }
+  ingress {
+    from_port   = 3000
+    to_port     = 3000
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"] 
+    description = "Grafana Access"
   }
 
   egress {

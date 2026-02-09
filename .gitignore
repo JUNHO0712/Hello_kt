@@ -4,6 +4,7 @@
 *.zip
 terraform.tfvars  # 보안 민감 정보
 
+makekey.txt
 lambda설명.txt 
 alb 설명.txt
 main.txt
