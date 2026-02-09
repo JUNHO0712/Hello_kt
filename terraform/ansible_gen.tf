@@ -23,6 +23,6 @@ ansible_ssh_private_key_file=../k3s-deployer.pem
 ansible_ssh_common_args='-o StrictHostKeyChecking=no -o ProxyCommand="ssh -W %h:%p -q ubuntu@${aws_instance.monitoring_server.public_ip} -i ../k3s-deployer.pem"'
 EOT
 
-  filename = "${path.module}/ansible/inventory/aws.ini"
+  filename   = "${path.module}/ansible/inventory/aws.ini"
   depends_on = [aws_instance.web_server, aws_instance.monitoring_server, local_file.ssh_key]
 }

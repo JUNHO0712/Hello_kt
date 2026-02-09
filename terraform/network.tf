@@ -3,7 +3,7 @@
 # 1. VPC 생성
 resource "aws_vpc" "main" {
   cidr_block = "10.0.0.0/16"
-  tags = { Name = "Main-VPC" }
+  tags       = { Name = "Main-VPC" }
 }
 
 # 2. 서브넷 생성 (고가용성을 위해 2개의 가용영역 사용)
@@ -11,27 +11,27 @@ resource "aws_subnet" "public_1" {
   vpc_id            = aws_vpc.main.id
   cidr_block        = "10.0.1.0/24"
   availability_zone = "ap-northeast-2a"
-  tags = { Name = "Public-Subnet-1" }
+  tags              = { Name = "Public-Subnet-1" }
 }
 # public_1 밑에 추가하세요
 resource "aws_subnet" "public_2" {
   vpc_id            = aws_vpc.main.id
   cidr_block        = "10.0.3.0/24"
   availability_zone = "ap-northeast-2b" # 2a가 아닌 다른 구역
-  tags = { Name = "Public-Subnet-2" }
+  tags              = { Name = "Public-Subnet-2" }
 }
 resource "aws_subnet" "private_1" {
   vpc_id            = aws_vpc.main.id
   cidr_block        = "10.0.2.0/24"
   availability_zone = "ap-northeast-2a"
-  tags = { Name = "Private-Subnet-1" }
+  tags              = { Name = "Private-Subnet-1" }
 }
 # 2번 프라이빗 서브넷 추가 (장애 대응용)
 resource "aws_subnet" "private_2" {
   vpc_id            = aws_vpc.main.id
   cidr_block        = "10.0.4.0/24"
   availability_zone = "ap-northeast-2b" # 2c가 아닌 다른 구역
-  tags = { Name = "Private-Subnet-2" }
+  tags              = { Name = "Private-Subnet-2" }
 }
 # 3. 인터넷 관문 (Public용)
 resource "aws_internet_gateway" "igw" {
@@ -89,7 +89,7 @@ resource "aws_lb" "web_alb" {
   internal           = false
   load_balancer_type = "application"
   security_groups    = [aws_security_group.web_sg.id]
-  subnets = [aws_subnet.public_1.id, aws_subnet.public_2.id] # ALB는 서브넷 2개 이상 필요
+  subnets            = [aws_subnet.public_1.id, aws_subnet.public_2.id] # ALB는 서브넷 2개 이상 필요
 }
 
 # 2. 대상 그룹 (앱 서버들을 담는 바구니)
@@ -100,10 +100,10 @@ resource "aws_lb_target_group" "app_tg" {
   vpc_id   = aws_vpc.main.id
 
   health_check {
-    path                = "/" # 서버의 "/" 경로가 정상인지 체크
-    protocol            = "HTTP"
-    matcher             = "200" # 응답 코드가 200이면 "살아있음!"
-    interval            = 30
+    path     = "/" # 서버의 "/" 경로가 정상인지 체크
+    protocol = "HTTP"
+    matcher  = "200" # 응답 코드가 200이면 "살아있음!"
+    interval = 30
   }
 }
 

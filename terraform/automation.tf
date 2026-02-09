@@ -21,8 +21,8 @@ resource "aws_iam_role" "lambda_role" {
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
-      Action = "sts:AssumeRole"
-      Effect = "Allow"
+      Action    = "sts:AssumeRole"
+      Effect    = "Allow"
       Principal = { Service = "lambda.amazonaws.com" }
     }]
   })
@@ -50,11 +50,11 @@ resource "aws_iam_role_policy" "ec2_policy" {
   })
 }
 resource "aws_lambda_function" "ec2_start_lambda" {
-  filename         = data.archive_file.start_zip.output_path
-  function_name    = "EC2_Start_Function"
-  role             = aws_iam_role.lambda_role.arn
-  handler          = "ec2_start.lambda_handler"
-  runtime          = "python3.9"
+  filename      = data.archive_file.start_zip.output_path
+  function_name = "EC2_Start_Function"
+  role          = aws_iam_role.lambda_role.arn
+  handler       = "ec2_start.lambda_handler"
+  runtime       = "python3.9"
 
 
   environment {
@@ -73,7 +73,7 @@ resource "aws_lambda_function" "ec2_stop_lambda" {
   handler          = "ec2_stop.lambda_handler"
   runtime          = "python3.9"
   source_code_hash = data.archive_file.stop_zip.output_base64sha256
- 
+
   environment {
     variables = {
       INSTANCE_IDS = join(",", aws_instance.web_server[*].id)
