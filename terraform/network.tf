@@ -98,6 +98,13 @@ resource "aws_lb_target_group" "app_tg" {
   port     = 80
   protocol = "HTTP"
   vpc_id   = aws_vpc.main.id
+
+  health_check {
+    path                = "/" # 서버의 "/" 경로가 정상인지 체크
+    protocol            = "HTTP"
+    matcher             = "200" # 응답 코드가 200이면 "살아있음!"
+    interval            = 30
+  }
 }
 
 # 3. 리스너 (80포트로 오면 대상 그룹으로 전달)
