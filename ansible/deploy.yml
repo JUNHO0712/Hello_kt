@@ -1,0 +1,29 @@
+- hosts: web
+  become: yes
+  tasks:
+    - name: Install packages (Docker + pip)
+      apt:
+        name:
+          - docker.io
+          - python3-pip
+        state: present
+        update_cache: yes
+
+    - name: Install Python docker SDK (for docker_container)
+      pip:
+        name: docker
+
+    - name: Ensure Docker service is running
+      service:
+        name: docker
+        state: started
+        enabled: yes
+
+    - name: Run lunch-api container (public image, no login)
+      docker_container:
+        name: lunch-api
+        image: ghcr.io/hjh6709/lunch-api:latest
+        state: started
+        restart_policy: always
+        ports:
+          - "80:8000"
