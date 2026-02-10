@@ -18,23 +18,6 @@ resource "aws_security_group" "web_sg" {
     cidr_blocks = ["0.0.0.0/0"] # 실제로는 본인 IP만 허용하는 게 좋습니다.
   }
 
-  # Node Exporter -  서버의 건강 상태 수집기
-  ingress {
-    from_port = 9100
-    to_port   = 9100
-    protocol  = "tcp"
-    # 모니터링 서버만 접근 허용
-    security_groups = [aws_security_group.monitoring_sg.id]
-
-  }
-  ingress {
-  from_port       = 10250
-  to_port         = 10250
-  protocol        = "tcp"
-  security_groups = [aws_security_group.monitoring_sg.id]
-  description     = "Kubelet API (from Master)"
-}
-
   egress {
     from_port   = 0
     to_port     = 0
@@ -66,20 +49,43 @@ resource "aws_security_group" "monitoring_sg" {
     cidr_blocks = ["0.0.0.0/0"]
     description = "Grafana Access"
   }
-
-ingress {
-  from_port       = 6443
-  to_port         = 6443
-  protocol        = "tcp"
-  security_groups = [aws_security_group.web_sg.id]
-  description     = "Kubernetes API Server"
-}
   egress {
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
     cidr_blocks = ["0.0.0.0/0"]
   }
+}
+# 꼬여있던 연결 고리를 별도 리소스로 해결
+# (Web SG에 Monitoring SG로부터의 접근 허용 규칙 추가)
+resource "aws_security_group_rule" "master_to_worker_node_exporter" {
+  type                     = "ingress"
+  from_port                = 9100
+  to_port                  = 9100
+  protocol                 = "tcp"
+  security_group_id        = aws_security_group.web_sg.id        # 수정됨
+  source_security_group_id = aws_security_group.monitoring_sg.id # 수정됨
+  description              = "Prometheus to Worker Node Exporter"
+}
+
+resource "aws_security_group_rule" "master_to_worker_kubelet" {
+  type                     = "ingress"
+  from_port                = 10250
+  to_port                  = 10250
+  protocol                 = "tcp"
+  security_group_id        = aws_security_group.web_sg.id        # 수정됨
+  source_security_group_id = aws_security_group.monitoring_sg.id # 수정됨
+  description              = "Master to Worker Kubelet API"
+}
+
+resource "aws_security_group_rule" "worker_to_master_k8s_api" {
+  type                     = "ingress"
+  from_port                = 6443
+  to_port                  = 6443
+  protocol                 = "tcp"
+  security_group_id        = aws_security_group.monitoring_sg.id # 수정됨
+  source_security_group_id = aws_security_group.web_sg.id        # 수정됨
+  description              = "Worker to Master K8s API"
 }
 # EC2 설정에 보안 그룹 연결
 # 통합된 EC2 생성 코드
@@ -94,13 +100,13 @@ resource "aws_instance" "web_server" {
   }
 }
 resource "aws_instance" "monitoring_server" {
-  ami                    = "ami-040c33c6a51fd5d96" # 동일한 Ubuntu 이미지 사용 [cite: 2, 5]
+  ami                    = "ami-040c33c6a51fd5d96" # 동일한 Ubuntu 이미지 사용
   instance_type          = "t3.micro"              # 프로메테우스는 메모리를 많이 쓰므로 t2.medium 추천
   vpc_security_group_ids = [aws_security_group.monitoring_sg.id]
   subnet_id              = aws_subnet.public_1.id
   iam_instance_profile   = aws_iam_instance_profile.monitoring_profile.name
   tags = {
-    Name = "Monitoring-Server-Prometheus" # 모니터링 전용 태그 [cite: 3]
+    Name = "Monitoring-Server" # 모니터링 전용 태그
   }
 }
 
