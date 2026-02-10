@@ -4,8 +4,6 @@
 *.zip
 terraform.tfvars  # 보안 민감 정보
 
-notes
-
 # fastapi cache
 __pycache__/
 
