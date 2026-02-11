@@ -60,7 +60,7 @@ resource "aws_lambda_function" "ec2_start_lambda" {
   environment {
     variables = {
       # [중요!] 생성된 EC2 2대의 ID를 쉼표로 합쳐서 자동으로 전달합니다.
-      INSTANCE_IDS = join(",", aws_instance.web_server[*].id)
+      INSTANCE_IDS = join(",", concat(aws_instance.Worker_server[*].id, [aws_instance.Master_server.id], [aws_instance.monitoring_server.id]))
     }
   }
 }
@@ -76,7 +76,7 @@ resource "aws_lambda_function" "ec2_stop_lambda" {
 
   environment {
     variables = {
-      INSTANCE_IDS = join(",", aws_instance.web_server[*].id)
+      INSTANCE_IDS = join(",", concat(aws_instance.Worker_server[*].id, [aws_instance.Master_server.id], [aws_instance.monitoring_server.id]))
     }
   }
 }

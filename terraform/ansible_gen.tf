@@ -2,15 +2,17 @@
 resource "local_file" "ansible_inventory" {
   content = <<-EOT
 [master]
-# 앱 서버는 프라이빗 서브넷에 있으므로 private_ip를 써야 합니다.
-${aws_instance.web_server[0].private_ip} ansible_user=ubuntu ansible_ssh_private_key_file=../k3s-deployer.pem
+# Master_server 리소스의 프라이빗 IP를 참조합니다.
+${aws_instance.Master_server.private_ip} ansible_user=ubuntu ansible_ssh_private_key_file=./Hello_kt.pem
 
 [worker]
-${aws_instance.web_server[1].private_ip} ansible_user=ubuntu ansible_ssh_private_key_file=../k3s-deployer.pem
+# Worker_server 리소스는 count=2이므로 index [0], [1]로 가져옵니다.
+${aws_instance.Worker_server[0].private_ip} ansible_user=ubuntu ansible_ssh_private_key_file=./Hello_kt.pem
+${aws_instance.Worker_server[1].private_ip} ansible_user=ubuntu ansible_ssh_private_key_file=./Hello_kt.pem
 
 [monitoring]
-# 모니터링 서버는 외부에서 접속해야 하므로 public_ip를 씁니다.
-${aws_instance.monitoring_server.public_ip} ansible_user=ubuntu ansible_ssh_private_key_file=../k3s-deployer.pem
+# 모니터링 서버(배스천)는 외부 접속용 public_ip를 씁니다.
+${aws_instance.monitoring_server.public_ip} ansible_user=ubuntu ansible_ssh_private_key_file=./Hello_kt.pem
 
 [k3s_cluster:children]
 master
@@ -18,11 +20,12 @@ worker
 
 [k3s_cluster:vars]
 ansible_user=ubuntu
-ansible_ssh_private_key_file=../k3s-deployer.pem
-# ★핵심: 모니터링 서버를 경유(ProxyJump)해서 프라이빗 서버로 접속하는 설정
-ansible_ssh_common_args='-o StrictHostKeyChecking=no -o ProxyCommand="ssh -W %h:%p -q ubuntu@${aws_instance.monitoring_server.public_ip} -i ../k3s-deployer.pem"'
+ansible_ssh_private_key_file=./Hello_kt.pem
+# ★핵심: 배스천 서버를 경유하여 프라이빗 서브넷 노드들에 접속하는 설정입니다.
+ansible_ssh_common_args='-o StrictHostKeyChecking=no -o ProxyCommand="ssh -W %h:%p -q ubuntu@${aws_instance.monitoring_server.public_ip} -i ./Hello_kt.pem"'
 EOT
 
-  filename   = "${path.module}/ansible/inventory/aws.ini"
-  depends_on = [aws_instance.web_server, aws_instance.monitoring_server, local_file.ssh_key]
+  filename = "${path.module}/ansible/inventory/aws.ini"
+  # 의존성(depends_on)도 바뀐 리소스 이름으로 수정해야 합니다.
+  depends_on = [aws_instance.Master_server, aws_instance.Worker_server, aws_instance.monitoring_server]
 }

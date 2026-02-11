@@ -15,25 +15,24 @@ resource "aws_subnet" "public_1" {
   tags                    = { Name = "Public-Subnet-1" }
 }
 # public_1 밑에 추가하세요
-resource "aws_subnet" "public_2" {
-  vpc_id                  = aws_vpc.main.id
-  cidr_block              = "10.0.3.0/24"
-  availability_zone       = "ap-northeast-2b"
-  map_public_ip_on_launch = true
-  tags                    = { Name = "Public-Subnet-2" }
-}
 resource "aws_subnet" "private_1" {
   vpc_id            = aws_vpc.main.id
   cidr_block        = "10.0.2.0/24"
   availability_zone = "ap-northeast-2a"
   tags              = { Name = "Private-Subnet-1" }
 }
-# 2번 프라이빗 서브넷 추가 (장애 대응용)
 resource "aws_subnet" "private_2" {
   vpc_id            = aws_vpc.main.id
-  cidr_block        = "10.0.4.0/24"
-  availability_zone = "ap-northeast-2b" # 2c가 아닌 다른 구역
+  cidr_block        = "10.0.3.0/24"
+  availability_zone = "ap-northeast-2b"
   tags              = { Name = "Private-Subnet-2" }
+}
+# 2번 프라이빗 서브넷 추가 (장애 대응용)
+resource "aws_subnet" "private_3" {
+  vpc_id            = aws_vpc.main.id
+  cidr_block        = "10.0.4.0/24"
+  availability_zone = "ap-northeast-2c"
+  tags              = { Name = "Private-Subnet-3" }
 }
 # 3. 인터넷 관문 (Public용)
 resource "aws_internet_gateway" "igw" {
@@ -73,15 +72,18 @@ resource "aws_route_table_association" "public_assoc" {
   subnet_id      = aws_subnet.public_1.id
   route_table_id = aws_route_table.public_rt.id
 }
-# 2번 프라이빗 서브넷도 NAT를 쓰도록 연결
+
+# 4. 프라이빗 서브넷에 이 지도를 쥐어주기
+resource "aws_route_table_association" "private_assoc_1" {
+  subnet_id      = aws_subnet.private_1.id
+  route_table_id = aws_route_table.private_rt.id
+}
 resource "aws_route_table_association" "private_assoc_2" {
   subnet_id      = aws_subnet.private_2.id
   route_table_id = aws_route_table.private_rt.id
 }
-
-# 4. 프라이빗 서브넷에 이 지도를 쥐어주기
-resource "aws_route_table_association" "private_assoc" {
-  subnet_id      = aws_subnet.private_1.id
+resource "aws_route_table_association" "private_assoc_3" {
+  subnet_id      = aws_subnet.private_3.id
   route_table_id = aws_route_table.private_rt.id
 }
 
