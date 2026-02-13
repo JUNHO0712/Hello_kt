@@ -141,6 +141,22 @@ resource "aws_instance" "monitoring_server" {
     Name = "Monitoring-Server" # 모니터링 전용 태그
   }
 }
+# S3 버킷 생성
+resource "aws_s3_bucket" "tfstate" {
+  bucket = "my-project-terraform-state-unique-name" # 세상에 하나뿐인 이름
+}
+
+# DynamoDB 테이블 생성 (Lock 용도)
+resource "aws_dynamodb_table" "terraform_lock" {
+  name         = "terraform-lock"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "LockID" # 반드시 LockID여야 합니다 (대소문자 주의)
+
+  attribute {
+    name = "LockID"
+    type = "S"
+  }
+}
 
 # 1. 모니터링 서버용 역할
 resource "aws_iam_role" "monitoring_role" {
