@@ -3,9 +3,9 @@
 # 1. VPC 생성
 resource "aws_vpc" "main" {
   cidr_block = "10.0.0.0/16"
-  tags       = { Name = "Main-VPC" }
+  # Name 뒤에 워크스페이스 이름을 붙여서 이름 중복 방지
+  tags = { Name = "Main-VPC-${terraform.workspace}" } 
 }
-
 # 2. 서브넷 생성 (고가용성을 위해 2개의 가용영역 사용)
 resource "aws_subnet" "public_1" {
   vpc_id                  = aws_vpc.main.id

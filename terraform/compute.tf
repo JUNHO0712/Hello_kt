@@ -138,12 +138,12 @@ resource "aws_instance" "monitoring_server" {
   iam_instance_profile   = aws_iam_instance_profile.monitoring_profile.name
   key_name               = "Hello_kt"
   tags = {
-    Name = "Monitoring-Server" # 모니터링 전용 태그
+    Name = "Monitoring-Server-${terraform.workspace}"
   }
 }
 # S3 버킷 생성
 resource "aws_s3_bucket" "tfstate" {
-  bucket = "my-project-terraform-state-unique-name" # 세상에 하나뿐인 이름
+  bucket = "my-project-tfstate-${terraform.workspace}-unique" 
 }
 
 # DynamoDB 테이블 생성 (Lock 용도)
@@ -160,7 +160,7 @@ resource "aws_dynamodb_table" "terraform_lock" {
 
 # 1. 모니터링 서버용 역할
 resource "aws_iam_role" "monitoring_role" {
-  name = "monitoring_server_role"
+  name = "monitoring_role_${terraform.workspace}"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
