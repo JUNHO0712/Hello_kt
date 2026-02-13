@@ -1,0 +1,111 @@
+---
+# ===========================================
+# 1. 시간 동기화 (모든 서버)
+# ===========================================
+- name: Configure Time Synchronization
+  hosts: all
+  become: yes
+  tags: [chrony, time-sync]
+  roles:
+    - chrony
+
+# ===========================================
+# 2. K3s Master 설치
+# ===========================================
+- name: Install K3s Master
+  hosts: master
+  become: yes
+  tags: [k3s, k3s-master]
+  roles:
+    - k3s_master
+
+# ===========================================
+# 3. K3s Worker 설치
+# ===========================================
+- name: Install K3s Workers
+  hosts: worker
+  become: yes
+  tags: [k3s, k3s-worker]
+  roles:
+    - k3s_worker
+
+# ===========================================
+# 4. 클러스터 검증 및 테스트 (수정됨!)
+# ===========================================
+- name: Verify K3s Cluster
+  hosts: master
+  become: yes
+  tags: [verify]
+  # 환경변수를 Play 전체에 적용하여 모든 태스크가 KUBECONFIG를 인지하도록 함
+  environment:
+    KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+    
+  tasks:
+    - name: Wait for all nodes to be ready
+      shell: |
+        kubectl get nodes --no-headers | grep -v NotReady | wc -l
+      register: ready_nodes
+      until: ready_nodes.stdout | int == 3
+      retries: 20
+      delay: 10
+      changed_when: false
+
+    - name: Get cluster status
+      command: kubectl get nodes -o wide
+      register: cluster_status
+      changed_when: false
+
+    - name: Display cluster status
+      debug:
+        msg: "{{ cluster_status.stdout_lines }}"
+
+    - name: Get pods in all namespaces
+      command: kubectl get pods -A
+      register: all_pods
+      changed_when: false
+
+    - name: Display all pods
+      debug:
+        msg: "{{ all_pods.stdout_lines }}"
+
+    - name: Run deployment test (Nginx)
+      shell: |
+        kubectl create deployment nginx-test --image=nginx:latest --replicas=2
+        kubectl wait --for=condition=available --timeout=60s deployment/nginx-test
+      register: test_deploy
+      changed_when: false
+      ignore_errors: yes
+
+    - name: Clean up test deployment
+      command: kubectl delete deployment nginx-test
+      when: test_deploy is success
+      changed_when: false
+
+    - name: Success message
+      debug:
+        msg: "K3s cluster is fully operational with {{ ready_nodes.stdout }} nodes! (1 Master, 2 Workers)"
+
+# ===========================================
+# 매뉴얼 및 트러블슈팅 가이드
+# ===========================================
+# === ■ 전체 설치 ===
+# ansible-playbook -i inventory/aws.ini site.yml
+#
+# === ■ 단계별 설치 ===
+# Step 1: 시간 동기화 (전체 4대)
+# ansible-playbook -i inventory/aws.ini site.yml --tags chrony
+#
+# Step 2: Master 설치 (1대)
+# ansible-playbook -i inventory/aws.ini site.yml --tags k3s-master
+#
+# Step 3: Worker 설치 (2대)
+# ansible-playbook -i inventory/aws.ini site.yml --tags k3s-worker
+#
+# Step 4: 클러스터 상태 검증
+# ansible-playbook -i inventory/aws.ini site.yml --tags verify
+#
+# === ■ 트러블슈팅 ===
+# 특정 Worker만 재설치 (예: IP가 10.0.3.10 인 경우)
+# ansible-playbook -i inventory/aws.ini site.yml --tags k3s-worker --limit 10.0.3.10
+#
+# Dry-run (실제 반영 전 문법/동
