@@ -4,7 +4,7 @@
 # ===========================================
 - name: Configure Time Synchronization
   hosts: all
-  become: yes
+  become: true
   tags: [chrony, time-sync]
   roles:
     - chrony
@@ -14,7 +14,7 @@
 # ===========================================
 - name: Install K3s Master
   hosts: master
-  become: yes
+  become: true
   tags: [k3s, k3s-master]
   roles:
     - k3s_master
@@ -24,7 +24,7 @@
 # ===========================================
 - name: Install K3s Workers
   hosts: worker
-  become: yes
+  become: true
   tags: [k3s, k3s-worker]
   roles:
     - k3s_worker
@@ -34,7 +34,7 @@
 # ===========================================
 - name: Verify K3s Cluster
   hosts: master
-  become: yes
+  become: true
   tags: [verify]
   # 환경변수를 Play 전체에 적용하여 모든 태스크가 KUBECONFIG를 인지하도록 함
   environment:
@@ -74,7 +74,7 @@
         kubectl wait --for=condition=available --timeout=60s deployment/nginx-test
       register: test_deploy
       changed_when: false
-      ignore_errors: yes
+      ignore_errors: true
 
     - name: Clean up test deployment
       command: kubectl delete deployment nginx-test

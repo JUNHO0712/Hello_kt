@@ -9,6 +9,7 @@ k3s_version: "v1.34.3+k3s1"
 k3s_install_url: "https://get.k3s.io"
 
 # 마스터 실행 옵션 (Master Role에서 사용)
+# 스왑 메모리를 사용하지 않기 위해 만듦
 k3s_server_options:
   - "--write-kubeconfig-mode=644"
   - "--disable=traefik"
