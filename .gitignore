@@ -8,4 +8,5 @@ terraform.tfvars  # 보안 민감 정보
 __pycache__/
 
 ansible/key/Hello_kt.pem
+terraform/Hello_kt.pem
 .DS_Store
