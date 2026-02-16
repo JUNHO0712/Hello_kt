@@ -33,7 +33,7 @@ ansible_ssh_common_args='-o StrictHostKeyChecking=no -o ProxyCommand="ssh -W %h:
 EOT
 
   filename = "${path.module}/../ansible/inventory/aws.ini"
-  
+
   depends_on = [
     aws_instance.Master_server,
     aws_instance.Worker_server,

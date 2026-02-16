@@ -4,7 +4,7 @@
 resource "aws_vpc" "main" {
   cidr_block = "10.0.0.0/16"
   # Name 뒤에 워크스페이스 이름을 붙여서 이름 중복 방지
-  tags = { Name = "Main-VPC-${terraform.workspace}" } 
+  tags = { Name = "Main-VPC-${terraform.workspace}" }
 }
 # 2. 서브넷 생성 (고가용성을 위해 2개의 가용영역 사용)
 resource "aws_subnet" "public_1" {
@@ -42,10 +42,12 @@ resource "aws_internet_gateway" "igw" {
 # 1. NAT가 사용할 고정 IP(EIP) 하나 예약
 resource "aws_eip" "nat_eip" {
   domain = "vpc"
+  tags   = { Name = "NAT-EIP" }
 }
 
 # 2. NAT 게이트웨이 생성 (반드시 퍼블릭 서브넷에 두어야 함)
 resource "aws_nat_gateway" "nat_gw" {
+
   allocation_id = aws_eip.nat_eip.id
   subnet_id     = aws_subnet.public_1.id # 입구는 퍼블릭에!
   tags          = { Name = "Main-NAT" }
@@ -54,11 +56,13 @@ resource "aws_nat_gateway" "nat_gw" {
 # 3. 프라이빗 전용 라우팅 테이블 (프라이빗 서버들을 위한 지도)
 resource "aws_route_table" "private_rt" {
   vpc_id = aws_vpc.main.id
-
-  route {
-    cidr_block     = "0.0.0.0/0"
-    nat_gateway_id = aws_nat_gateway.nat_gw.id # 인터넷 나갈 거면 NAT로 가라!
-  }
+  tags   = { Name = "Private-RT" }
+}
+# NAT Gateway를 통한 인터넷 라우트 (NAT와 함께 삭제/생성)
+resource "aws_route" "private_internet_route" {
+  route_table_id         = aws_route_table.private_rt.id
+  destination_cidr_block = "0.0.0.0/0"
+  nat_gateway_id         = aws_nat_gateway.nat_gw.id
 }
 resource "aws_route_table" "public_rt" {
   vpc_id = aws_vpc.main.id

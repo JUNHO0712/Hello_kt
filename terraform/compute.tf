@@ -2,8 +2,9 @@
 
 # 모니터링 서버 전용 보안 그룹 
 resource "aws_security_group" "monitoring_sg" {
-  name   = "monitoring_server_sg"
-  vpc_id = aws_vpc.main.id
+  name        = "${var.project_name}-monitoring-sg"
+  description = "Security group for monitoring server (Bastion + Prometheus + Grafana)"
+  vpc_id      = aws_vpc.main.id
   ingress {
     from_port   = 9090 # 프로메테우스 기본 포트
     to_port     = 9090
@@ -16,6 +17,7 @@ resource "aws_security_group" "monitoring_sg" {
     to_port     = 22
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
+    description = "SSH access for Bastion"
   }
   ingress {
     from_port   = 3000
@@ -29,17 +31,25 @@ resource "aws_security_group" "monitoring_sg" {
     to_port     = 0
     protocol    = "-1"
     cidr_blocks = ["0.0.0.0/0"]
+    description = "Allow all outbound traffic"
+  }
+  tags = {
+    Name        = "${var.project_name}-Monitoring-SG"
+    Environment = var.environment
+    Role        = "Monitoring-Bastion"
   }
 }
 # 웹 서버용 보안 그룹 (마스터/워커 노드 공용)
 resource "aws_security_group" "web_sg" {
-  name   = "web_server_sg"
-  vpc_id = aws_vpc.main.id
+  name        = "${var.project_name}-web-sg"
+  description = "Security group for K3s Master and Worker nodes"
+  vpc_id      = aws_vpc.main.id
   ingress {
     from_port   = 80
     to_port     = 80
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
+    description = "HTTP access"
   }
   # 배스쳔 서버에서만 SSH 허용
   ingress {
@@ -55,9 +65,17 @@ resource "aws_security_group" "web_sg" {
     to_port     = 0
     protocol    = "-1"
     cidr_blocks = ["0.0.0.0/0"]
+    description = "Allow all outbound traffic"
+  }
+  tags = {
+    Name        = "${var.project_name}-Web-SG"
+    Environment = var.environment
+    Role        = "K3s-Cluster"
   }
 }
-
+# ==========================================
+# 보안 그룹 규칙 - K3s 통신용
+# ==========================================
 # Web SG에 Monitoring SG로부터의 접근 허용 규칙 추가
 resource "aws_security_group_rule" "master_to_worker_node_exporter" {
   type                     = "ingress"
@@ -106,80 +124,58 @@ resource "aws_security_group_rule" "allow_internal_all" {
   source_security_group_id = aws_security_group.web_sg.id
   description              = "Allow all internal traffic between Master and Workers"
 }
-# EC2 설정에 보안 그룹 연결
-# 통합된 EC2 생성 코드
-resource "aws_instance" "Worker_server" {
-  count                  = 2
-  ami                    = "ami-040c33c6a51fd5d96"
-  instance_type          = "t3.small"
-  vpc_security_group_ids = [aws_security_group.web_sg.id]
-  # 계획에 맞춰 private_2와 private_3에 배치
-  subnet_id = element([aws_subnet.private_2.id, aws_subnet.private_3.id], count.index)
-  key_name  = "Hello_kt"
-  tags = {
-    Name = "Worker-Node-${count.index + 1}"
-  }
-}
+# ==========================================
+# EC2 인스턴스 - Master Node
+# ==========================================
 resource "aws_instance" "Master_server" {
-  ami                    = "ami-040c33c6a51fd5d96"
-  instance_type          = "t3.small"
+  ami                    = var.ubuntu_ami
+  instance_type          = var.instance_type
   vpc_security_group_ids = [aws_security_group.web_sg.id]
   subnet_id              = aws_subnet.private_1.id
-  key_name               = "Hello_kt"
+  key_name               = var.key_name
   tags = {
-    Name = "Master-Node"
+    Name        = "${var.project_name}-Master-Node"
+    Environment = var.environment
+    Role        = "K3s-Master"
+    Scheduler   = "Managed by Lambda"
   }
 }
+# ==========================================
+# EC2 인스턴스 - Worker Nodes
+# ==========================================
+resource "aws_instance" "Worker_server" {
+  count = var.worker_count
+
+  ami                    = var.ubuntu_ami
+  instance_type          = var.instance_type
+  vpc_security_group_ids = [aws_security_group.web_sg.id]
+  subnet_id              = element([aws_subnet.private_2.id, aws_subnet.private_3.id], count.index)
+  key_name               = var.key_name
+
+  tags = {
+    Name        = "${var.project_name}-Worker-Node-${count.index + 1}"
+    Environment = var.environment
+    Role        = "K3s-Worker"
+    Scheduler   = "Managed by Lambda"
+  }
+}
+# ==========================================
+# EC2 인스턴스 - Monitoring Server (Bastion + Prometheus)
+# ==========================================
 resource "aws_instance" "monitoring_server" {
-  ami                    = "ami-040c33c6a51fd5d96" # 동일한 Ubuntu 이미지 사용
-  instance_type          = "t3.small"              # 프로메테우스는 메모리를 많이 쓰므로 t2.medium 추천
+  ami                    = var.ubuntu_ami
+  instance_type          = var.instance_type
   vpc_security_group_ids = [aws_security_group.monitoring_sg.id]
   subnet_id              = aws_subnet.public_1.id
   iam_instance_profile   = aws_iam_instance_profile.monitoring_profile.name
-  key_name               = "Hello_kt"
+  key_name               = var.key_name
+
   tags = {
-    Name = "Monitoring-Server-${terraform.workspace}"
-  }
-}
-# S3 버킷 생성
-resource "aws_s3_bucket" "tfstate" {
-  bucket = "my-project-tfstate-${terraform.workspace}-unique" 
-}
-
-# DynamoDB 테이블 생성 (Lock 용도)
-resource "aws_dynamodb_table" "terraform_lock" {
-  name         = "terraform-lock"
-  billing_mode = "PAY_PER_REQUEST"
-  hash_key     = "LockID" # 반드시 LockID여야 합니다 (대소문자 주의)
-
-  attribute {
-    name = "LockID"
-    type = "S"
+    Name        = "${var.project_name}-Monitoring-Server"
+    Environment = var.environment
+    Role        = "Bastion-Prometheus-Grafana"
+    Scheduler   = "Managed by Lambda"
   }
 }
 
-# 1. 모니터링 서버용 역할
-resource "aws_iam_role" "monitoring_role" {
-  name = "monitoring_role_${terraform.workspace}"
 
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Action    = "sts:AssumeRole"
-      Effect    = "Allow"
-      Principal = { Service = "ec2.amazonaws.com" }
-    }]
-  })
-}
-
-# 2. EC2 정보를 읽을 수 있는 권한 부여 (Read Only)
-resource "aws_iam_role_policy_attachment" "ec2_read" {
-  role       = aws_iam_role.monitoring_role.name
-  policy_arn = "arn:aws:iam::aws:policy/AmazonEC2ReadOnlyAccess"
-}
-
-# 3. EC2에 이 신분증을 부착할 '프로필' 생성
-resource "aws_iam_instance_profile" "monitoring_profile" {
-  name = "monitoring_instance_profile"
-  role = aws_iam_role.monitoring_role.name
-}
