@@ -9,4 +9,6 @@ __pycache__/
 
 ansible/key/Hello_kt.pem
 
+Hello_kt.pem
+
 .DS_Store
