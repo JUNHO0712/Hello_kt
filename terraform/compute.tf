@@ -51,6 +51,7 @@ resource "aws_security_group" "web_sg" {
     cidr_blocks = ["0.0.0.0/0"]
     description = "HTTP access"
   }
+
   # 배스쳔 서버에서만 SSH 허용
   ingress {
     from_port       = 22

@@ -11,4 +11,6 @@ ansible/key/Hello_kt.pem
 
 terraform/Hello_kt.pem
 
+*.pem
+
 .DS_Store
