@@ -96,6 +96,15 @@ resource "aws_security_group_rule" "master_to_worker_cAvisor" {
   source_security_group_id = aws_security_group.monitoring_sg.id
   description              = "Prometheus to Worker CAdvisor"
 }
+resource "aws_security_group_rule" "monitoring_to_ksm" {
+  type                     = "ingress"
+  from_port                = 8081
+  to_port                  = 8081 # 8080에서 8081로 변경
+  protocol                 = "tcp"
+  security_group_id        = aws_security_group.web_sg.id
+  source_security_group_id = aws_security_group.monitoring_sg.id
+  description              = "Prometheus to Kube-state-metrics"
+}
 resource "aws_security_group_rule" "master_to_worker_kubelet" {
   type                     = "ingress"
   from_port                = 10250
@@ -115,6 +124,7 @@ resource "aws_security_group_rule" "monitoring_to_master_api" {
   source_security_group_id = aws_security_group.monitoring_sg.id # 출발: Monitoring
   description              = "Monitoring to K8s API Server"
 }
+
 # 동일 SG(web_sg)를 가진 서버끼리는 모든 통신 허용 (K8s 통신용)
 resource "aws_security_group_rule" "allow_internal_all" {
   type                     = "ingress"
