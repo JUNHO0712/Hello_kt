@@ -25,3 +25,10 @@ PEM 키 권한 복구: provider.tf에서 새로운 키가 생성될 수 있으�
 
 icacls .\Hello_kt.pem /inheritance:r
 icacls .\Hello_kt.pem /grant:r "${env:USERNAME}:R"
+
+앤서블 플레이북 실행
+cd ../ansible
+ansible -i inventory/aws.ini all -m ping
+-> 먼저 연결 되었는지 확인, 되어있음 생략
+ansible-playbook -i inventory/aws.ini site.yml
+-> 전체 구축 실행 명령어 (k3s 설치 + 워커 조인 + 모니터링 등)

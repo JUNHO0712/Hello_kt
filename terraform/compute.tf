@@ -64,6 +64,15 @@ resource "aws_security_group_rule" "monitoring_ssh" {
   cidr_blocks       = ["0.0.0.0/0"]
   description       = "SSH access"
 }
+resource "aws_security_group_rule" "monitoring_http" {
+  type              = "ingress"
+  from_port         = 80
+  to_port           = 80
+  protocol          = "tcp"
+  security_group_id = aws_security_group.monitoring_sg.id
+  cidr_blocks       = ["0.0.0.0/0"]
+  description       = "HTTP access"
+}
 
 resource "aws_security_group_rule" "monitoring_prometheus" {
   type              = "ingress"
@@ -171,6 +180,15 @@ resource "aws_security_group_rule" "monitoring_to_loki" {
   security_group_id        = aws_security_group.web_sg.id
   source_security_group_id = aws_security_group.monitoring_sg.id
   description              = "Grafana (Monitoring) to Loki NodePort"
+}
+resource "aws_security_group_rule" "monitoring_to_nodeport_30080" {
+  type                     = "ingress"
+  from_port                = 30080
+  to_port                  = 30080
+  protocol                 = "tcp"
+  security_group_id        = aws_security_group.web_sg.id
+  source_security_group_id = aws_security_group.monitoring_sg.id
+  description              = "Allow NodePort 30080 from Monitoring (Nginx reverse proxy)"
 }
 
 # ==========================================
