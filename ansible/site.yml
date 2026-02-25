@@ -1,10 +1,9 @@
----
 # ===========================================
 # 1. 시간 동기화 (모든 서버)
 # ===========================================
 - name: Configure Time Synchronization
   hosts: all
-  become: true
+  become: yes
   tags: [chrony, time-sync]
   roles:
     - chrony
@@ -14,7 +13,7 @@
 # ===========================================
 - name: Install K3s Master
   hosts: master
-  become: true
+  become: yes
   tags: [k3s, k3s-master]
   roles:
     - k3s_master
@@ -24,24 +23,63 @@
 # ===========================================
 - name: Install K3s Workers
   hosts: worker
-  become: true
+  become: yes
   tags: [k3s, k3s-worker]
   roles:
     - k3s_worker
 
 # ===========================================
-# 4. 클러스터 검증 및 테스트 (수정됨!)
+# 4. 모니터링 - Node Exporter (K3s 노드)
+# ===========================================
+- name: Install Node Exporter on K3s Nodes
+  hosts: all:!monitoring   # -> master, worker monitoring 
+  become: yes
+  tags: [monitoring, node-exporter]
+  roles:
+    - node_exporter
+
+# ===========================================
+# 5. 모니터링 - Full Stack (모니터링 서버)
+# ===========================================
+- name: Install Monitoring Stack (Prometheus + Grafana)
+  hosts: monitoring
+  become: yes
+  tags: [monitoring, monitoring-stack]
+  roles:
+    - monitoring
+# ===========================================
+# 6. 모니터링 - Kube-state-metrics (K3s 클러스터 내부)
+# ===========================================
+- name: Deploy Kube-state-metrics to K3s Cluster
+  hosts: master
+  become: yes
+  tags: [monitoring, ksm]
+  roles:
+    - kube_state_metrics
+# ===========================================
+# 6-1. Loki 배포 (K3s 클러스터 내부)
+# ===========================================
+- name: Deploy Loki to K3s Cluster
+  hosts: master
+  become: yes
+  tags: [monitoring, loki]
+  environment:
+    KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+  roles:
+    - loki
+
+# ===========================================
+# 7. 클러스터 검증 및 테스트
 # ===========================================
 - name: Verify K3s Cluster
   hosts: master
-  become: true
+  become: yes
   tags: [verify]
-  # 환경변수를 Play 전체에 적용하여 모든 태스크가 KUBECONFIG를 인지하도록 함
   environment:
-    KUBECONFIG: /etc/rancher/k3s/k3s.yaml
+    KUBECONFIG: /etc/rancher/k3s/k3s.yaml  # kubectl이 어떤 kubeconfig를 참조할지 지정
     
   tasks:
-    - name: Wait for all nodes to be ready
+    - name: Wait for all nodes to be ready # 노드가 3개 (1개 master + 2개 worker) 모두 Ready 상태가 될 때까지 대기
       shell: |
         kubectl get nodes --no-headers | grep -v NotReady | wc -l
       register: ready_nodes
@@ -68,22 +106,120 @@
       debug:
         msg: "{{ all_pods.stdout_lines }}"
 
-    - name: Run deployment test (Nginx)
+    - name: Run deployment test (Nginx)  # 실제 워크로드를 배포/대기하여 "클러스터가 진짜로 동작"하는지 검증
       shell: |
         kubectl create deployment nginx-test --image=nginx:latest --replicas=2
         kubectl wait --for=condition=available --timeout=60s deployment/nginx-test
       register: test_deploy
       changed_when: false
-      ignore_errors: true
+      ignore_errors: yes    # 테스트 실패해도 전체 플레이북이 바로 죽지 않게(디버깅 편의)
 
-    - name: Clean up test deployment
+    - name: Clean up test deployment # 테스트가 성공했을 때만 삭제
       command: kubectl delete deployment nginx-test
       when: test_deploy is success
       changed_when: false
 
+    # 테스트가 실패하는 경우 nginx-test가 남을 수 있어서 항상 실행하도록
+    #- name: Clean up test deployment (always try)
+     # command: kubectl delete deployment nginx-test --ignore-not-found=true
+     # changed_when: false
+
     - name: Success message
       debug:
         msg: "K3s cluster is fully operational with {{ ready_nodes.stdout }} nodes! (1 Master, 2 Workers)"
+
+# ===========================================
+# 8. 모니터링 검증
+# ===========================================
+- name: Verify Monitoring Stack
+  hosts: monitoring
+  become: yes
+  tags: [verify, verify-monitoring]
+  tasks:
+    - name: Wait for Prometheus to be ready
+      uri:
+        url: http://localhost:9090/-/ready
+        status_code: 200
+      register: prometheus_ready
+      until: prometheus_ready.status == 200
+      retries: 10
+      delay: 5
+      ignore_errors: yes
+
+    - name: Wait for Grafana to be ready
+      uri:
+        url: http://localhost:3000/api/health
+        status_code: 200
+      register: grafana_ready
+      until: grafana_ready.status == 200
+      retries: 10
+      delay: 5
+      ignore_errors: yes
+
+    - name: Check Node Exporter on monitoring server
+      uri:
+        url: http://localhost:9100/metrics
+        status_code: 200
+      register: node_exporter_ready
+      ignore_errors: yes
+
+    # --- cAdvisor 검증 추가 ---
+    - name: Wait for cAdvisor to be ready
+      uri:
+        url: http://localhost:8080/metrics
+        status_code: 200
+      register: cadvisor_ready
+      until: cadvisor_ready.status == 200
+      retries: 10
+      delay: 5
+      ignore_errors: yes
+
+    - name: Get monitoring stack status
+      command: docker compose ps
+      args:
+        chdir: /opt/monitoring
+      register: monitoring_status
+      changed_when: false
+
+    - name: Display monitoring status
+      debug:
+        msg: "{{ monitoring_status.stdout_lines }}"
+
+    - name: Get public IP for access URLs
+      set_fact:
+        monitoring_public_ip: "{{ ansible_host }}"
+    # --- KSM 검증  추가 ---
+    - name: Check Kube-state-metrics on Worker Nodes
+      uri:
+        url: "http://{{ item }}:30081/metrics"
+        status_code: 200
+      loop: "{{ groups['worker'] }}"  # 인벤토리의 worker 그룹 IP들 순회
+      register: ksm_verify
+      ignore_errors: yes
+
+    - name: Success message
+      debug:
+        msg: |
+          ✅ Monitoring Stack is ready!
+          
+          📊 Access URLs:
+          - Grafana:    http://{{ monitoring_public_ip }}:3000 (admin/admin)
+          - Prometheus: http://{{ monitoring_public_ip }}:9090
+          - Node Export: http://{{ monitoring_public_ip }}:9100/metrics
+          - cAdvisor:   http://{{ ansible_host }}:8080
+          - KSM:        http://{{ groups['worker'][0] }}:30081/metrics
+
+# ===========================================
+# 9. Lunch App 배포 (GHCR → K3s)
+# ===========================================
+- name: Deploy Lunch App to K3s
+  hosts: master
+  become: yes
+  tags: [app, deploy]
+  environment:
+    KUBECONFIG: /etc/rancher/k3s/k3s.yaml # app_deploy role에서도 kubectl이 클러스터를 정확히 보도록 함
+  roles:
+    - app_deploy  # 템플릿 렌더링 -> kubecl apply -> rollout 확인
 
 # ===========================================
 # 매뉴얼 및 트러블슈팅 가이드
@@ -101,11 +237,59 @@
 # Step 3: Worker 설치 (2대)
 # ansible-playbook -i inventory/aws.ini site.yml --tags k3s-worker
 #
-# Step 4: 클러스터 상태 검증
+# Step 4: K3s 노드에 Node Exporter 설치 (3대: Master + Workers)
+# ansible-playbook -i inventory/aws.ini site.yml --tags node-exporter
+#
+# Step 5: 모니터링 서버에 전체 스택 설치 (1대)
+# ansible-playbook -i inventory/aws.ini site.yml --tags monitoring-stack
+#
+# Step 6: 클러스터 상태 검증
 # ansible-playbook -i inventory/aws.ini site.yml --tags verify
+#
+# Step 7: 모니터링 스택 검증
+# ansible-playbook -i inventory/aws.ini site.yml --tags verify-monitoring
+#
+# === ■ 모니터링만 설치 (K3s 건드리지 않음) ===
+# ansible-playbook -i inventory/aws.ini site.yml --tags monitoring
 #
 # === ■ 트러블슈팅 ===
 # 특정 Worker만 재설치 (예: IP가 10.0.3.10 인 경우)
 # ansible-playbook -i inventory/aws.ini site.yml --tags k3s-worker --limit 10.0.3.10
 #
-# Dry-run (실제 반영 전 문법/동
+# 모니터링 서버만 재설치
+# ansible-playbook -i inventory/aws.ini site.yml --tags monitoring-stack
+#
+# 특정 Worker의 Node Exporter만 재설치
+# ansible-playbook -i inventory/aws.ini site.yml --tags node-exporter --limit 10.0.3.10
+#
+# === ■ 모니터링 접속 정보 확인 ===
+# ansible monitoring -i inventory/aws.ini -m debug -a "var=ansible_host"
+#
+# === ■ Kube-state-metrics (KSM) 관련 ===
+#
+# 1) KSM만 재배포 (설정 변경 시)
+# ansible-playbook -i inventory/aws.ini site.yml --tags ksm
+#
+# 2) KSM 재배포 및 동작 즉시 검증
+# ansible-playbook -i inventory/aws.ini site.yml --tags ksm,verify-monitoring
+#
+# 3) KSM 포트 충돌 확인 (Worker 노드에서 실행)
+# netstat -tulpn | grep 30081
+#
+# === ■ Loki (로그 모니터링) 관련 ===
+#
+# 1) Loki만 재배포 (설정 변경 또는 재설치 시)
+# ansible-playbook -i inventory/aws.ini site.yml --tags loki
+#
+# 2) Loki 배포 및 K3s 내 Pod 상태 즉시 확인
+# ansible-playbook -i inventory/aws.ini site.yml --tags loki --limit master
+# (Master 노드에서 kubectl을 통해 배포되므로 master 그룹으로 한정 가능)
+#
+# 3) Loki 서비스 포트 및 접속 확인 (Master 노드 실행)
+# kubectl get svc -n monitoring | grep loki
+#
+# 4) Loki 로그 수집 상태 확인 (Grafana Explore 탭에서 테스트)
+# Grafana 접속 후 Data Source에 http://loki:3100 (내부 DNS) 또는 해당 IP 등록 확인
+#
+
+
