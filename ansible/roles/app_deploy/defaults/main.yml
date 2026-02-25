@@ -2,7 +2,6 @@
 app_name: lunch-api
 app_namespace: lunch
 
-# ✅ 네 GHCR 이미지 (너가 올린 workflow 기준)
 # ghcr.io/<owner>/<repo>/lunch-api:latest
 app_image: ghcr.io/hjh6709/lunch_app_second/lunch-api:latest
 

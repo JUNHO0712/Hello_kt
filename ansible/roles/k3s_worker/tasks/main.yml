@@ -4,7 +4,7 @@
   command: cat /var/lib/rancher/k3s/server/node-token
   register: fetched_token
   delegate_to: "{{ groups['master'][0] }}" # 마스터 노드에 원격으로 접속해서 실행
-  become: yes
+  become: true
   changed_when: false
   when: hostvars['K3S_INFO_HOLDER'] is not defined
 
