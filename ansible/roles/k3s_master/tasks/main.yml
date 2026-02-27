@@ -32,7 +32,7 @@
   wait_for:
     port: 6443
     delay: 10
-    timeout: 300 
+    timeout: 300
 
 - name: Wait for node-token file to be generated
   wait_for:
@@ -45,18 +45,6 @@
     src: "{{ k3s_token_file }}"
   register: k3s_token_raw
 
-- name: Set K3s facts and share with Workers
-  block:
-    - name: Set local facts
-      set_fact:
-        k3s_master_token: "{{ k3s_token_raw.content | b64decode | trim }}"
-        k3s_master_ip: "{{ ansible_default_ipv4.address }}"
-
-    - name: Share information via dummy host (Safe way)
-      add_host:
-        name: "K3S_INFO_HOLDER"
-        token: "{{ k3s_master_token }}"
-        master_ip: "{{ k3s_master_ip }}"
 
 # 5. 사용자 편의성 설정 (kubectl 사용 환경)
 - name: Setup kubeconfig for ubuntu user
@@ -67,7 +55,7 @@
         state: directory
         owner: ubuntu
         group: ubuntu
-        mode: '0755' 
+        mode: '0755'
 
     - name: Copy and set permissions for kubeconfig
       copy:
@@ -81,7 +69,7 @@
       lineinfile:
         path: "/home/ubuntu/.bashrc"
         line: 'export KUBECONFIG=/home/ubuntu/.kube/config'
-        insertafter: EOF 
+        insertafter: EOF
 
 # 6. 최종 설치 검증
 - name: Verify cluster status
@@ -92,7 +80,7 @@
   until: nodes_check.rc == 0
   retries: 5
   delay: 10
-  changed_when: false 
+  changed_when: false
 
 - name: Display K3s Nodes
   debug:

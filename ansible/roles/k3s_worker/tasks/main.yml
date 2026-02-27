@@ -1,19 +1,18 @@
 ---
-# 1. 마스터 정보(Token, IP) 가져오기 (직접 조회 방식 추가)
-- name: Fetch token directly from Master if dummy host is missing
+# 1. 마스터 정보(Token, IP) 가져오기 (run_once + delegate_to)
+- name: Fetch token from Master (once)
   command: cat /var/lib/rancher/k3s/server/node-token
   register: fetched_token
-  delegate_to: "{{ groups['master'][0] }}" # 마스터 노드에 원격으로 접속해서 실행
+  delegate_to: "{{ groups['master'][0] }}"
   become: true
   changed_when: false
-  when: hostvars['K3S_INFO_HOLDER'] is not defined
+  run_once: true
 
 - name: Set K3s token and Master IP
   set_fact:
-    k3s_master_token: >-
-      {{ hostvars['K3S_INFO_HOLDER']['token'] if hostvars['K3S_INFO_HOLDER'] is defined else fetched_token.stdout }}
-    k3s_master_endpoint: >-
-      {{ hostvars['K3S_INFO_HOLDER']['master_ip'] if hostvars['K3S_INFO_HOLDER'] is defined else groups['master'][0] }}
+    k3s_master_token: "{{ fetched_token.stdout }}"
+    k3s_master_endpoint: "{{ groups['master'][0] }}"
+
 
 - name: Display Worker join information
   debug:
