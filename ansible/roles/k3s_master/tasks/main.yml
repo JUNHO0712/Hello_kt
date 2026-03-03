@@ -32,7 +32,7 @@
   wait_for:
     port: 6443
     delay: 10
-    timeout: 300
+    timeout: 300 
 
 - name: Wait for node-token file to be generated
   wait_for:
@@ -55,7 +55,7 @@
         state: directory
         owner: ubuntu
         group: ubuntu
-        mode: '0755'
+        mode: '0755' 
 
     - name: Copy and set permissions for kubeconfig
       copy:
@@ -69,7 +69,7 @@
       lineinfile:
         path: "/home/ubuntu/.bashrc"
         line: 'export KUBECONFIG=/home/ubuntu/.kube/config'
-        insertafter: EOF
+        insertafter: EOF 
 
 # 6. 최종 설치 검증
 - name: Verify cluster status
@@ -80,7 +80,7 @@
   until: nodes_check.rc == 0
   retries: 5
   delay: 10
-  changed_when: false
+  changed_when: false 
 
 - name: Display K3s Nodes
   debug:

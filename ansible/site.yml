@@ -47,6 +47,17 @@
   tags: [monitoring, monitoring-stack]
   roles:
     - monitoring
+
+# ===========================================
+# 5.5 외부 접속 - Nginx Reverse Proxy (모니터링 서버)
+# ===========================================
+- name: Install Nginx Reverse Proxy (Public -> Workers NodePort)
+  hosts: monitoring
+  become: yes
+  tags: [nginx, reverse-proxy]
+  roles:
+    - nginx_proxy      
+      
 # ===========================================
 # 6. 모니터링 - Kube-state-metrics (K3s 클러스터 내부)
 # ===========================================

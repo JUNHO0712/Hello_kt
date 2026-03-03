@@ -1,7 +1,7 @@
 - name: Check if Helm is installed
   command: which helm
   register: helm_installed
-  ignore_errors: true
+  ignore_errors: yes
   changed_when: false
 
 - name: Install Helm if not present
