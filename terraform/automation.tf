@@ -55,7 +55,7 @@ resource "aws_lambda_function" "ec2_start_lambda" {
   role          = aws_iam_role.lambda_role.arn
   handler       = "ec2_start.lambda_handler"
   runtime       = "python3.9"
-
+  timeout       = 60
 
   environment {
     variables = {
@@ -73,6 +73,7 @@ resource "aws_lambda_function" "ec2_stop_lambda" {
   handler          = "ec2_stop.lambda_handler"
   runtime          = "python3.9"
   source_code_hash = data.archive_file.stop_zip.output_base64sha256
+  timeout          = 60
 
   environment {
     variables = {
