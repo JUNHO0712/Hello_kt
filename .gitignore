@@ -13,4 +13,6 @@ terraform/Hello_kt.pem
 
 *.pem
 
+./github
+
 .DS_Store
